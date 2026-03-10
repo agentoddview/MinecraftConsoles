@@ -12,7 +12,9 @@ std::string JsonEscape(std::string_view input)
     std::string output;
     output.reserve(input.size() + 8);
 
-    for (const char character : input) {
+    constexpr char kHexDigits[] = "0123456789abcdef";
+
+    for (const unsigned char character : input) {
         switch (character) {
         case '\\':
             output += "\\\\";
@@ -29,8 +31,20 @@ std::string JsonEscape(std::string_view input)
         case '\t':
             output += "\\t";
             break;
+        case '\b':
+            output += "\\b";
+            break;
+        case '\f':
+            output += "\\f";
+            break;
         default:
-            output += character;
+            if (character < 0x20) {
+                output += "\\u00";
+                output += kHexDigits[(character >> 4) & 0x0f];
+                output += kHexDigits[character & 0x0f];
+            } else {
+                output += static_cast<char>(character);
+            }
             break;
         }
     }

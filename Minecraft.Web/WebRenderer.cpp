@@ -7,8 +7,7 @@
 #include <utility>
 
 namespace {
-constexpr const char* kVertexShaderSource = R"(
-#version 300 es
+constexpr const char* kVertexShaderSource = R"(#version 300 es
 precision highp float;
 out vec2 v_uv;
 
@@ -25,8 +24,7 @@ void main() {
 }
 )";
 
-constexpr const char* kFragmentShaderSource = R"(
-#version 300 es
+constexpr const char* kFragmentShaderSource = R"(#version 300 es
 precision highp float;
 in vec2 v_uv;
 
@@ -234,7 +232,9 @@ bool WebRenderer::BuildShaderProgram()
 
         std::string infoLog(static_cast<std::size_t>(length), '\0');
         if (length > 0) {
-            glGetProgramInfoLog(program_, length, nullptr, infoLog.data());
+            GLsizei written = 0;
+            glGetProgramInfoLog(program_, length, &written, infoLog.data());
+            infoLog.resize(static_cast<std::size_t>(std::max<GLsizei>(written, 0)));
         }
 
         glDeleteProgram(program_);
@@ -265,7 +265,9 @@ unsigned int WebRenderer::CompileShader(unsigned int shaderType, const char* sou
 
         std::string infoLog(static_cast<std::size_t>(length), '\0');
         if (length > 0) {
-            glGetShaderInfoLog(shader, length, nullptr, infoLog.data());
+            GLsizei written = 0;
+            glGetShaderInfoLog(shader, length, &written, infoLog.data());
+            infoLog.resize(static_cast<std::size_t>(std::max<GLsizei>(written, 0)));
         }
 
         glDeleteShader(shader);
