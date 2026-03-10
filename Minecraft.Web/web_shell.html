@@ -1,0 +1,898 @@
+<!doctype html>
+<html lang="en-us">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MinecraftConsoles Web Prototype</title>
+  <style>
+    :root {
+      --bg-0: #120f0d;
+      --bg-1: #1d1a16;
+      --panel: rgba(35, 29, 24, 0.88);
+      --panel-strong: rgba(49, 41, 33, 0.94);
+      --line: rgba(245, 224, 186, 0.14);
+      --text: #f8f0db;
+      --muted: #b4a48a;
+      --accent: #7cb06a;
+      --accent-2: #d9a35e;
+      --danger: #c86b63;
+      --shadow: rgba(0, 0, 0, 0.32);
+      --font-body: "Bahnschrift", "Trebuchet MS", sans-serif;
+      --font-title: "Rockwell", "Georgia", serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html, body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background:
+        radial-gradient(circle at top, rgba(163, 110, 64, 0.2), transparent 32%),
+        linear-gradient(180deg, var(--bg-1), var(--bg-0));
+      color: var(--text);
+      font-family: var(--font-body);
+    }
+
+    body {
+      position: relative;
+    }
+
+    #root {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+    }
+
+    #game-canvas {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      display: block;
+      background: #111;
+      outline: none;
+    }
+
+    #overlay {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      grid-template-rows: auto 1fr;
+      pointer-events: none;
+    }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 18px 22px;
+      pointer-events: auto;
+    }
+
+    .brand {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      text-shadow: 0 2px 14px rgba(0, 0, 0, 0.35);
+    }
+
+    .brand strong {
+      font-family: var(--font-title);
+      font-size: clamp(24px, 4vw, 40px);
+      letter-spacing: 0.04em;
+    }
+
+    .brand span {
+      color: var(--muted);
+      font-size: 13px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .pill-row {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .pill {
+      border: 1px solid var(--line);
+      background: rgba(24, 20, 16, 0.78);
+      color: var(--muted);
+      border-radius: 999px;
+      padding: 9px 13px;
+      font-size: 12px;
+      letter-spacing: 0.04em;
+      box-shadow: 0 10px 30px var(--shadow);
+      backdrop-filter: blur(12px);
+    }
+
+    .main-stage {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      padding: 24px;
+    }
+
+    .panel {
+      width: min(480px, calc(100vw - 48px));
+      border: 1px solid var(--line);
+      background: linear-gradient(180deg, rgba(58, 47, 37, 0.93), var(--panel));
+      border-radius: 24px;
+      box-shadow: 0 20px 70px rgba(0, 0, 0, 0.42);
+      padding: 24px;
+      pointer-events: auto;
+      backdrop-filter: blur(18px);
+      animation: panel-in 220ms ease-out;
+    }
+
+    .panel h1,
+    .panel h2 {
+      margin: 0 0 8px;
+      font-family: var(--font-title);
+      line-height: 1.05;
+    }
+
+    .panel p {
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+
+    .panel-stack {
+      display: grid;
+      gap: 16px;
+      align-content: start;
+    }
+
+    .button-row {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    button,
+    input,
+    textarea {
+      font: inherit;
+    }
+
+    button {
+      border: none;
+      border-radius: 14px;
+      padding: 12px 16px;
+      background: linear-gradient(180deg, #89be74, #5e8e4e);
+      color: #14120f;
+      font-weight: 700;
+      cursor: pointer;
+      transition: transform 120ms ease, filter 120ms ease;
+    }
+
+    button.secondary {
+      background: linear-gradient(180deg, #dfb775, #b98444);
+    }
+
+    button.ghost {
+      background: rgba(248, 240, 219, 0.08);
+      color: var(--text);
+      border: 1px solid var(--line);
+    }
+
+    button.danger {
+      background: linear-gradient(180deg, #d98d85, #b85f58);
+    }
+
+    button:hover {
+      transform: translateY(-1px);
+      filter: brightness(1.05);
+    }
+
+    input[type="text"],
+    textarea,
+    input[type="range"] {
+      width: 100%;
+    }
+
+    input[type="text"],
+    textarea {
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      background: rgba(18, 16, 13, 0.72);
+      color: var(--text);
+      border-radius: 14px;
+      padding: 12px 14px;
+      outline: none;
+    }
+
+    textarea {
+      resize: vertical;
+      min-height: 120px;
+    }
+
+    .field {
+      display: grid;
+      gap: 8px;
+    }
+
+    .field label {
+      font-size: 13px;
+      color: var(--muted);
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    .world-list {
+      display: grid;
+      gap: 12px;
+      max-height: min(50vh, 420px);
+      overflow: auto;
+      padding-right: 4px;
+    }
+
+    .world-card {
+      display: grid;
+      gap: 10px;
+      border: 1px solid var(--line);
+      background: rgba(22, 19, 15, 0.55);
+      border-radius: 18px;
+      padding: 14px;
+    }
+
+    .world-card strong {
+      font-size: 18px;
+    }
+
+    .world-meta {
+      color: var(--muted);
+      font-size: 13px;
+      display: grid;
+      gap: 4px;
+    }
+
+    .hud {
+      position: absolute;
+      inset: auto 24px 24px 24px;
+      display: grid;
+      gap: 12px;
+      pointer-events: none;
+    }
+
+    .hud-top,
+    .hud-help {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      border: 1px solid var(--line);
+      background: rgba(16, 14, 11, 0.72);
+      border-radius: 18px;
+      padding: 12px 14px;
+      box-shadow: 0 14px 40px var(--shadow);
+      backdrop-filter: blur(14px);
+      pointer-events: auto;
+    }
+
+    .hud-top strong {
+      display: block;
+      margin-bottom: 4px;
+      font-size: 14px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .hud-buttons {
+      display: flex;
+      gap: 10px;
+    }
+
+    .hud-buttons button {
+      padding: 10px 12px;
+      font-size: 12px;
+    }
+
+    .crosshair {
+      position: absolute;
+      inset: 50% auto auto 50%;
+      width: 22px;
+      height: 22px;
+      margin-left: -11px;
+      margin-top: -11px;
+      display: none;
+      pointer-events: none;
+    }
+
+    .crosshair::before,
+    .crosshair::after {
+      content: "";
+      position: absolute;
+      background: rgba(248, 240, 219, 0.92);
+      box-shadow: 0 0 14px rgba(0, 0, 0, 0.5);
+    }
+
+    .crosshair::before {
+      left: 10px;
+      top: 0;
+      width: 2px;
+      height: 22px;
+    }
+
+    .crosshair::after {
+      top: 10px;
+      left: 0;
+      height: 2px;
+      width: 22px;
+    }
+
+    .status-line {
+      font-size: 14px;
+      color: var(--muted);
+    }
+
+    .checkbox-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 10px 0;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    }
+
+    .checkbox-row:last-child {
+      border-bottom: none;
+    }
+
+    .hidden {
+      display: none !important;
+    }
+
+    .center {
+      display: grid;
+      place-items: center;
+      height: 100%;
+    }
+
+    .inventory-grid {
+      display: grid;
+      grid-template-columns: repeat(9, 1fr);
+      gap: 8px;
+    }
+
+    .slot {
+      aspect-ratio: 1;
+      border-radius: 12px;
+      border: 1px solid var(--line);
+      background: linear-gradient(180deg, rgba(112, 100, 81, 0.18), rgba(36, 31, 26, 0.72));
+    }
+
+    .empty-message {
+      padding: 18px;
+      border: 1px dashed rgba(255, 255, 255, 0.15);
+      border-radius: 16px;
+      color: var(--muted);
+      text-align: center;
+    }
+
+    @keyframes panel-in {
+      from {
+        opacity: 0;
+        transform: translateY(10px) scale(0.98);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+      }
+    }
+
+    @media (max-width: 720px) {
+      .topbar,
+      .main-stage {
+        padding: 16px;
+      }
+
+      .hud {
+        inset: auto 16px 16px 16px;
+      }
+
+      .hud-top,
+      .hud-help {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div id="root">
+    <canvas id="game-canvas" tabindex="-1"></canvas>
+    <div id="overlay">
+      <div class="topbar">
+        <div class="brand">
+          <strong>MinecraftConsoles Web</strong>
+          <span>Single-player browser prototype</span>
+        </div>
+        <div class="pill-row">
+          <div class="pill" id="status-pill">Booting browser runtime...</div>
+          <div class="pill" id="feature-pill">Desktop browsers, WebGL 2, new browser saves</div>
+        </div>
+      </div>
+
+      <div class="main-stage">
+        <div class="center" id="boot-panel">
+          <section class="panel panel-stack">
+            <h1>Preparing the browser runtime</h1>
+            <p>Mounting save storage, compiling shaders, and wiring the browser-native UI shell.</p>
+            <div class="status-line" id="boot-status">Waiting for Emscripten runtime...</div>
+          </section>
+        </div>
+
+        <div class="center hidden" id="title-panel">
+          <section class="panel panel-stack">
+            <h1>Legacy Console Edition, Reframed</h1>
+            <p>This local POC runs in the browser with WebAssembly, WebGL 2, and browser-side saves. Multiplayer and Windows save import are intentionally excluded from v1.</p>
+            <div class="button-row">
+              <button id="play-button">Play</button>
+              <button class="secondary" id="settings-button">Settings</button>
+              <button class="ghost" id="fullscreen-button">Fullscreen</button>
+            </div>
+          </section>
+        </div>
+
+        <div class="center hidden" id="worlds-panel">
+          <section class="panel panel-stack">
+            <h2>World Select</h2>
+            <p>Create fresh browser-native worlds or resume one from this browser profile.</p>
+            <div class="field">
+              <label for="world-name-input">New World Name</label>
+              <input id="world-name-input" type="text" maxlength="40" placeholder="Tutorial Mesa">
+            </div>
+            <div class="button-row">
+              <button id="create-world-button">Create World</button>
+              <button class="ghost" id="worlds-back-button">Back</button>
+            </div>
+            <div class="world-list" id="world-list"></div>
+          </section>
+        </div>
+
+        <div class="center hidden" id="pause-panel">
+          <section class="panel panel-stack">
+            <h2>Paused</h2>
+            <p>The scene keeps rendering underneath the overlay. Resume to recapture the mouse and continue exploring.</p>
+            <div class="button-row">
+              <button id="resume-button">Resume</button>
+              <button class="secondary" id="pause-settings-button">Settings</button>
+              <button class="ghost" id="pause-fullscreen-button">Fullscreen</button>
+              <button class="danger" id="exit-title-button">Exit to Title</button>
+            </div>
+          </section>
+        </div>
+
+        <div class="center hidden" id="settings-panel">
+          <section class="panel panel-stack">
+            <h2>Settings</h2>
+            <p>These are browser-side prototype settings saved into IndexedDB through IDBFS.</p>
+            <div class="checkbox-row">
+              <span>Show HUD</span>
+              <input id="setting-show-hud" type="checkbox">
+            </div>
+            <div class="checkbox-row">
+              <span>Invert Mouse</span>
+              <input id="setting-invert-mouse" type="checkbox">
+            </div>
+            <div class="field">
+              <label for="setting-render-scale">Render Scale</label>
+              <input id="setting-render-scale" type="range" min="50" max="150" step="5">
+              <div class="status-line" id="render-scale-label">100%</div>
+            </div>
+            <div class="button-row">
+              <button class="ghost" id="settings-back-button">Back</button>
+            </div>
+          </section>
+        </div>
+
+        <div class="center hidden" id="inventory-panel">
+          <section class="panel panel-stack">
+            <h2>Inventory</h2>
+            <p>This browser UI replaces the original SWF/Iggy runtime. The slots are placeholder chrome for the web-port scaffolding.</p>
+            <div class="inventory-grid" id="inventory-grid"></div>
+            <div class="button-row">
+              <button class="ghost" id="inventory-close-button">Close</button>
+            </div>
+          </section>
+        </div>
+
+        <div class="center hidden" id="chat-panel">
+          <section class="panel panel-stack">
+            <h2>Chat</h2>
+            <p>Chat is UI-only in this v1 scope. Multiplayer transport is intentionally out of scope.</p>
+            <div class="field">
+              <label for="chat-text-input">Message Draft</label>
+              <textarea id="chat-text-input" placeholder="The web port is live."></textarea>
+            </div>
+            <div class="button-row">
+              <button class="secondary" id="chat-send-button">Store Draft</button>
+              <button class="ghost" id="chat-close-button">Close</button>
+            </div>
+          </section>
+        </div>
+
+        <div class="hud hidden" id="hud">
+          <div class="hud-top">
+            <div>
+              <strong id="hud-world-name">No world loaded</strong>
+              <div class="status-line" id="hud-position">X 0.00  Y 1.70  Z 6.00</div>
+            </div>
+            <div class="hud-buttons">
+              <button class="ghost" id="hud-capture-button">Capture Mouse</button>
+              <button class="secondary" id="hud-pause-button">Pause</button>
+            </div>
+          </div>
+          <div class="hud-help" id="hud-help">WASD move, Space and Shift fly, click canvas to capture, Esc pause, E inventory, T chat, F1 HUD, F11 fullscreen.</div>
+        </div>
+
+        <div class="crosshair hidden" id="crosshair"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    var Module = {
+      preRun: [],
+      postRun: [function () {
+        if (window.MinecraftWebUI) {
+          window.MinecraftWebUI.onRuntimeReady();
+        }
+      }],
+      canvas: (function () {
+        return document.getElementById('game-canvas');
+      })(),
+      setStatus: function (text) {
+        if (window.MinecraftWebUI) {
+          window.MinecraftWebUI.setStatus(text);
+        }
+      }
+    };
+
+    (function () {
+      var state = {
+        runtimeReady: false,
+        mode: 'boot',
+        status: 'Booting browser runtime...',
+        storageReady: false,
+        currentWorldId: -1,
+        currentWorldName: '',
+        pointerLocked: false,
+        supportsMultiplayer: false,
+        supportsExistingSaveImport: false,
+        options: {
+          showHud: true,
+          invertMouse: false,
+          renderScale: 100
+        },
+        player: {
+          x: 0,
+          y: 1.7,
+          z: 6,
+          yaw: 3.14,
+          pitch: -0.18,
+          ticksPlayed: 0
+        },
+        worlds: []
+      };
+
+      function byId(id) {
+        return document.getElementById(id);
+      }
+
+      var elements = {
+        bootPanel: byId('boot-panel'),
+        bootStatus: byId('boot-status'),
+        titlePanel: byId('title-panel'),
+        worldsPanel: byId('worlds-panel'),
+        pausePanel: byId('pause-panel'),
+        settingsPanel: byId('settings-panel'),
+        inventoryPanel: byId('inventory-panel'),
+        chatPanel: byId('chat-panel'),
+        worldList: byId('world-list'),
+        worldNameInput: byId('world-name-input'),
+        statusPill: byId('status-pill'),
+        featurePill: byId('feature-pill'),
+        hud: byId('hud'),
+        hudWorldName: byId('hud-world-name'),
+        hudPosition: byId('hud-position'),
+        hudHelp: byId('hud-help'),
+        crosshair: byId('crosshair'),
+        showHud: byId('setting-show-hud'),
+        invertMouse: byId('setting-invert-mouse'),
+        renderScale: byId('setting-render-scale'),
+        renderScaleLabel: byId('render-scale-label'),
+        chatText: byId('chat-text-input'),
+        inventoryGrid: byId('inventory-grid')
+      };
+
+      function setVisible(element, visible) {
+        element.classList.toggle('hidden', !visible);
+      }
+
+      function callExport(name, args, types) {
+        if (!Module || !Module.ccall) {
+          return;
+        }
+
+        Module.ccall(name, null, types || [], args || []);
+      }
+
+      function stopInputPropagation(element) {
+        element.addEventListener('keydown', function (event) {
+          event.stopPropagation();
+        });
+      }
+
+      function renderInventorySlots() {
+        if (elements.inventoryGrid.childElementCount > 0) {
+          return;
+        }
+
+        for (var index = 0; index < 27; index += 1) {
+          var slot = document.createElement('div');
+          slot.className = 'slot';
+          elements.inventoryGrid.appendChild(slot);
+        }
+      }
+
+      function renderWorlds() {
+        elements.worldList.innerHTML = '';
+
+        if (!state.worlds.length) {
+          var empty = document.createElement('div');
+          empty.className = 'empty-message';
+          empty.textContent = 'No browser worlds yet. Create one to start the web prototype.';
+          elements.worldList.appendChild(empty);
+          return;
+        }
+
+        state.worlds.forEach(function (world) {
+          var card = document.createElement('article');
+          card.className = 'world-card';
+
+          var title = document.createElement('strong');
+          title.textContent = world.name;
+          card.appendChild(title);
+
+          var meta = document.createElement('div');
+          meta.className = 'world-meta';
+          meta.textContent = 'Last played: ' + world.lastPlayedUtc + ' | Ticks: ' + world.ticksPlayed;
+          card.appendChild(meta);
+
+          var actions = document.createElement('div');
+          actions.className = 'button-row';
+
+          var openButton = document.createElement('button');
+          openButton.textContent = 'Open';
+          openButton.addEventListener('click', function () {
+            callExport('webOpenWorldById', [world.id], ['number']);
+          });
+          actions.appendChild(openButton);
+
+          var deleteButton = document.createElement('button');
+          deleteButton.className = 'danger';
+          deleteButton.textContent = 'Delete';
+          deleteButton.addEventListener('click', function () {
+            callExport('webDeleteWorldById', [world.id], ['number']);
+          });
+          actions.appendChild(deleteButton);
+
+          card.appendChild(actions);
+          elements.worldList.appendChild(card);
+        });
+      }
+
+      function render() {
+        elements.statusPill.textContent = state.status;
+        elements.bootStatus.textContent = state.status;
+
+        var supportBits = [
+          'Desktop browsers',
+          'WebGL 2',
+          'New browser saves',
+          state.storageReady ? 'IndexedDB ready' : 'Ephemeral session'
+        ];
+
+        if (!state.supportsMultiplayer) {
+          supportBits.push('No multiplayer');
+        }
+        if (!state.supportsExistingSaveImport) {
+          supportBits.push('No Windows save import');
+        }
+
+        elements.featurePill.textContent = supportBits.join(' | ');
+
+        setVisible(elements.bootPanel, state.mode === 'boot');
+        setVisible(elements.titlePanel, state.mode === 'title');
+        setVisible(elements.worldsPanel, state.mode === 'worlds');
+        setVisible(elements.pausePanel, state.mode === 'paused');
+        setVisible(elements.settingsPanel, state.mode === 'settings');
+        setVisible(elements.inventoryPanel, state.mode === 'inventory');
+        setVisible(elements.chatPanel, state.mode === 'chat');
+
+        var showHud = state.options.showHud &&
+          state.currentWorldId >= 0 &&
+          ['in_game', 'paused', 'settings', 'inventory', 'chat'].indexOf(state.mode) !== -1;
+
+        setVisible(elements.hud, showHud);
+        setVisible(elements.crosshair, state.mode === 'in_game' && state.pointerLocked);
+
+        elements.hudWorldName.textContent = state.currentWorldName || 'No world loaded';
+        elements.hudPosition.textContent =
+          'X ' + state.player.x.toFixed(2) +
+          '  Y ' + state.player.y.toFixed(2) +
+          '  Z ' + state.player.z.toFixed(2) +
+          '  Ticks ' + state.player.ticksPlayed;
+
+        elements.hudHelp.textContent =
+          'WASD move, Space and Shift fly, click canvas to capture, Esc pause, E inventory, T chat, F1 HUD, F11 fullscreen.';
+
+        elements.showHud.checked = !!state.options.showHud;
+        elements.invertMouse.checked = !!state.options.invertMouse;
+        elements.renderScale.value = state.options.renderScale;
+        elements.renderScaleLabel.textContent = state.options.renderScale + '%';
+
+        renderWorlds();
+        renderInventorySlots();
+      }
+
+      function bindEvents() {
+        Module.canvas.addEventListener('click', function () {
+          if (state.mode === 'in_game') {
+            callExport('webRequestPointerLock');
+          }
+        });
+
+        byId('play-button').addEventListener('click', function () {
+          callExport('webShowWorldSelection');
+        });
+
+        byId('settings-button').addEventListener('click', function () {
+          callExport('webOpenSettings');
+        });
+
+        byId('fullscreen-button').addEventListener('click', function () {
+          callExport('webRequestFullscreen');
+        });
+
+        byId('create-world-button').addEventListener('click', function () {
+          var name = elements.worldNameInput.value.trim();
+          callExport('webStartNewWorld', [name || 'New World'], ['string']);
+          elements.worldNameInput.value = '';
+        });
+
+        byId('worlds-back-button').addEventListener('click', function () {
+          callExport('webReturnToTitle');
+        });
+
+        byId('resume-button').addEventListener('click', function () {
+          callExport('webResumeGame');
+        });
+
+        byId('pause-settings-button').addEventListener('click', function () {
+          callExport('webOpenSettings');
+        });
+
+        byId('pause-fullscreen-button').addEventListener('click', function () {
+          callExport('webRequestFullscreen');
+        });
+
+        byId('exit-title-button').addEventListener('click', function () {
+          callExport('webReturnToTitle');
+        });
+
+        byId('settings-back-button').addEventListener('click', function () {
+          callExport('webCloseOverlay');
+        });
+
+        byId('inventory-close-button').addEventListener('click', function () {
+          callExport('webToggleInventory');
+        });
+
+        byId('chat-close-button').addEventListener('click', function () {
+          callExport('webToggleChat');
+        });
+
+        byId('chat-send-button').addEventListener('click', function () {
+          state.status = 'Stored a local chat draft. Multiplayer transport is disabled in this prototype.';
+          render();
+        });
+
+        byId('hud-pause-button').addEventListener('click', function () {
+          callExport('webPauseGame');
+        });
+
+        byId('hud-capture-button').addEventListener('click', function () {
+          callExport('webRequestPointerLock');
+        });
+
+        elements.showHud.addEventListener('change', function () {
+          callExport('webUpdateSettingInt', ['showHud', elements.showHud.checked ? 1 : 0], ['string', 'number']);
+        });
+
+        elements.invertMouse.addEventListener('change', function () {
+          callExport('webUpdateSettingInt', ['invertMouse', elements.invertMouse.checked ? 1 : 0], ['string', 'number']);
+        });
+
+        elements.renderScale.addEventListener('input', function () {
+          elements.renderScaleLabel.textContent = elements.renderScale.value + '%';
+        });
+
+        elements.renderScale.addEventListener('change', function () {
+          callExport('webUpdateSettingInt', ['renderScale', parseInt(elements.renderScale.value, 10)], ['string', 'number']);
+        });
+
+        elements.worldNameInput.addEventListener('keydown', function (event) {
+          if (event.key === 'Enter') {
+            event.preventDefault();
+            callExport('webStartNewWorld', [elements.worldNameInput.value.trim() || 'New World'], ['string']);
+            elements.worldNameInput.value = '';
+          }
+        });
+
+        stopInputPropagation(elements.worldNameInput);
+        stopInputPropagation(elements.chatText);
+      }
+
+      renderInventorySlots();
+      bindEvents();
+      render();
+
+      window.MinecraftWebUI = {
+        onRuntimeReady: function () {
+          state.runtimeReady = true;
+          state.status = 'Emscripten runtime ready. Requesting initial UI state...';
+          render();
+          callExport('webRequestUiSync');
+        },
+        applyState: function (jsonText) {
+          try {
+            var next = JSON.parse(jsonText);
+            state.mode = next.mode;
+            state.status = next.status;
+            state.storageReady = next.storageReady;
+            state.currentWorldId = next.currentWorldId;
+            state.currentWorldName = next.currentWorldName;
+            state.pointerLocked = next.pointerLocked;
+            state.supportsMultiplayer = next.supportsMultiplayer;
+            state.supportsExistingSaveImport = next.supportsExistingSaveImport;
+            state.options = next.options;
+            state.player = next.player;
+            state.worlds = next.worlds;
+          } catch (error) {
+            console.error('MinecraftWeb UI failed to parse state payload.', error, jsonText);
+            state.status = 'Failed to parse UI state payload.';
+          }
+
+          render();
+        },
+        setStatus: function (text) {
+          state.status = text;
+          render();
+        },
+        requestPointerLock: function () {
+          var canvas = Module.canvas || byId('game-canvas');
+          if (canvas && canvas.requestPointerLock) {
+            canvas.requestPointerLock();
+          }
+        }
+      };
+    })();
+  </script>
+
+  {{{ SCRIPT }}}
+</body>
+</html>

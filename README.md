@@ -14,6 +14,7 @@ Windows users can download our [Nightly Build](https://github.com/smartcmd/Minec
 ## Platform Support
 
 - **Windows**: Supported for building and running the project
+- **Web (prototype)**: An Emscripten-based local browser proof-of-concept is available through the `MinecraftWeb` target. It currently focuses on single-player web runtime scaffolding rather than full Windows feature parity.
 - **macOS / Linux**: The Windows nightly build may run through Wine or CrossOver based on community reports, but this is unofficial and not currently tested by the maintainers
 
 ## Features
@@ -91,6 +92,25 @@ cmake --build build --config Debug --target MinecraftClient
 ```
 
 For more information, see [COMPILE.md](COMPILE.md).
+
+### CMake (Web Prototype via Emscripten)
+
+```powershell
+emcmake cmake -S . -B build-web -DCMAKE_BUILD_TYPE=Release
+cmake --build build-web --target MinecraftWeb
+```
+
+Run the generated prototype through a local HTTP server, for example:
+
+```powershell
+emrun --no_browser --port 8080 build-web/MinecraftWeb.html
+```
+
+The web build is currently a local single-player proof-of-concept with browser-native UI overlays, WebGL 2 rendering scaffolding, and browser-side saves. See [WEB_PORT.md](WEB_PORT.md) for scope and limitations.
+
+### Coolify
+
+The repository also includes a root `Dockerfile` for Coolify deployments. In Coolify, create an application from this Git repo, choose the `Dockerfile` build pack, keep the base directory at `/`, and expose container port `80`.
 
 ## Known Issues
 

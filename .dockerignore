@@ -1,0 +1,11 @@
+.git
+.github
+.vs
+.vscode
+build
+build-web
+x64
+*.suo
+*.user
+*.cache
+*.tmp

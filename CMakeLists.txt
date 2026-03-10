@@ -1,33 +1,67 @@
 cmake_minimum_required(VERSION 3.24)
 
-project(MinecraftConsoles LANGUAGES C CXX RC ASM_MASM)
+if(EMSCRIPTEN)
+  project(MinecraftConsoles LANGUAGES C CXX)
+else()
+  project(MinecraftConsoles LANGUAGES C CXX RC ASM_MASM)
+endif()
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-if(NOT WIN32)
-  message(FATAL_ERROR "This CMake build currently supports Windows only.")
-endif()
+if(EMSCRIPTEN)
+  include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/WebSources.cmake")
 
-if(NOT CMAKE_SIZEOF_VOID_P EQUAL 8)
-  message(FATAL_ERROR "Use a 64-bit generator/toolchain (x64).")
-endif()
+  list(TRANSFORM MINECRAFT_WEB_SOURCES PREPEND "${CMAKE_CURRENT_SOURCE_DIR}/Minecraft.Web/")
 
-set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
-
-function(configure_msvc_target target)
-  target_compile_options(${target} PRIVATE
-    $<$<AND:$<NOT:$<CONFIG:Release>>,$<COMPILE_LANGUAGE:C,CXX>>:/W3>
-    $<$<AND:$<CONFIG:Release>,$<COMPILE_LANGUAGE:C,CXX>>:/W0>
-    $<$<COMPILE_LANGUAGE:C,CXX>:/MP>
-    $<$<COMPILE_LANGUAGE:C,CXX>:/FS>
-    $<$<COMPILE_LANGUAGE:CXX>:/EHsc>
-    $<$<AND:$<CONFIG:Release>,$<COMPILE_LANGUAGE:C,CXX>>:/GL /O2 /Oi /GT /GF>
+  add_executable(MinecraftWeb ${MINECRAFT_WEB_SOURCES})
+  target_include_directories(MinecraftWeb PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/Minecraft.Web"
   )
-endfunction()
+  target_compile_definitions(MinecraftWeb PRIVATE
+    MINECRAFT_WEB=1
+  )
+  target_link_options(MinecraftWeb PRIVATE
+    "-sUSE_WEBGL2=1"
+    "-sMIN_WEBGL_VERSION=2"
+    "-sMAX_WEBGL_VERSION=2"
+    "-sFULL_ES3=1"
+    "-sALLOW_MEMORY_GROWTH=1"
+    "-sFORCE_FILESYSTEM=1"
+    "-sNO_EXIT_RUNTIME=1"
+    "-sENVIRONMENT=web"
+    "-sEXPORTED_RUNTIME_METHODS=['ccall','cwrap','FS']"
+    "-lidbfs.js"
+    "--shell-file" "${CMAKE_CURRENT_SOURCE_DIR}/Minecraft.Web/web_shell.html"
+  )
+  set_target_properties(MinecraftWeb PROPERTIES
+    OUTPUT_NAME "MinecraftWeb"
+    SUFFIX ".html"
+  )
+else()
+  if(NOT WIN32)
+  message(FATAL_ERROR "This CMake build currently supports Windows only.")
+  endif()
 
-include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/WorldSources.cmake")
-include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/ClientSources.cmake")
+  if(NOT CMAKE_SIZEOF_VOID_P EQUAL 8)
+  message(FATAL_ERROR "Use a 64-bit generator/toolchain (x64).")
+  endif()
+
+  set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+
+  function(configure_msvc_target target)
+    target_compile_options(${target} PRIVATE
+      $<$<AND:$<NOT:$<CONFIG:Release>>,$<COMPILE_LANGUAGE:C,CXX>>:/W3>
+      $<$<AND:$<CONFIG:Release>,$<COMPILE_LANGUAGE:C,CXX>>:/W0>
+      $<$<COMPILE_LANGUAGE:C,CXX>:/MP>
+      $<$<COMPILE_LANGUAGE:C,CXX>:/FS>
+      $<$<COMPILE_LANGUAGE:CXX>:/EHsc>
+      $<$<AND:$<CONFIG:Release>,$<COMPILE_LANGUAGE:C,CXX>>:/GL /O2 /Oi /GT /GF>
+    )
+  endfunction()
+
+  include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/WorldSources.cmake")
+  include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/ClientSources.cmake")
 
 list(TRANSFORM MINECRAFT_WORLD_SOURCES PREPEND "${CMAKE_CURRENT_SOURCE_DIR}/Minecraft.World/")
 list(TRANSFORM MINECRAFT_CLIENT_SOURCES PREPEND "${CMAKE_CURRENT_SOURCE_DIR}/Minecraft.Client/")
@@ -147,4 +181,5 @@ else()
   message(FATAL_ERROR "Redist and asset copying is only supported on Windows (Robocopy) and Unix systems (rsync).")
 endif()
 
-set_property(DIRECTORY PROPERTY VS_STARTUP_PROJECT MinecraftClient)
+  set_property(DIRECTORY PROPERTY VS_STARTUP_PROJECT MinecraftClient)
+endif()
