@@ -35,6 +35,11 @@ EMSCRIPTEN_KEEPALIVE void webShowWorldSelection()
     g_app.ShowWorldSelection();
 }
 
+EMSCRIPTEN_KEEPALIVE void webShowCreateWorldMenu()
+{
+    g_app.ShowCreateWorldMenu();
+}
+
 EMSCRIPTEN_KEEPALIVE void webReturnToTitle()
 {
     g_app.ReturnToTitle();
@@ -42,7 +47,24 @@ EMSCRIPTEN_KEEPALIVE void webReturnToTitle()
 
 EMSCRIPTEN_KEEPALIVE void webStartNewWorld(const char* name)
 {
-    g_app.StartNewWorld(name != nullptr ? name : "New World");
+    g_app.StartNewWorld(name != nullptr ? name : "New World", "", 0, 2, true, false);
+}
+
+EMSCRIPTEN_KEEPALIVE void webStartNewWorldDetailed(
+    const char* name,
+    const char* seed,
+    int gameModeId,
+    int difficulty,
+    int generateStructures,
+    int bonusChest)
+{
+    g_app.StartNewWorld(
+        name != nullptr ? name : "New World",
+        seed != nullptr ? seed : "",
+        gameModeId,
+        difficulty,
+        generateStructures != 0,
+        bonusChest != 0);
 }
 
 EMSCRIPTEN_KEEPALIVE void webOpenWorldById(int worldId)

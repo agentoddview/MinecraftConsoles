@@ -23,22 +23,32 @@ std::string Trim(std::string value)
     return value;
 }
 
-bool SplitWorldLine(const std::string& line, int& id, std::string& name, std::string& lastPlayed, int& ticksPlayed)
+bool SplitWorldLine(const std::string& line, web::WorldRecord& outWorld)
 {
     std::stringstream stream(line);
-    std::string idToken;
-    std::string ticksToken;
+    std::vector<std::string> tokens;
+    std::string token;
+    while (std::getline(stream, token, '|')) {
+        tokens.push_back(token);
+    }
 
-    if (!std::getline(stream, idToken, '|') ||
-        !std::getline(stream, name, '|') ||
-        !std::getline(stream, lastPlayed, '|') ||
-        !std::getline(stream, ticksToken)) {
+    if (tokens.size() < 4) {
         return false;
     }
 
     try {
-        id = std::stoi(idToken);
-        ticksPlayed = std::stoi(ticksToken);
+        outWorld.id = std::stoi(tokens[0]);
+        outWorld.name = tokens[1];
+        outWorld.lastPlayedUtc = tokens[2];
+        outWorld.ticksPlayed = std::stoi(tokens[3]);
+
+        if (tokens.size() >= 9) {
+            outWorld.gameModeId = std::stoi(tokens[4]);
+            outWorld.difficulty = std::stoi(tokens[5]);
+            outWorld.generateStructures = tokens[6] != "0";
+            outWorld.bonusChest = tokens[7] == "1";
+            outWorld.seed = tokens[8];
+        }
     } catch (...) {
         return false;
     }
@@ -92,13 +102,15 @@ WebOptions& WebStorage::MutableOptions()
     return options_;
 }
 
-WorldRecord WebStorage::CreateWorld(std::string name)
+WorldRecord WebStorage::CreateWorld(WorldRecord world)
 {
-    WorldRecord world;
     world.id = nextWorldId_++;
-    world.name = SanitizeName(std::move(name));
+    world.name = SanitizeName(std::move(world.name));
+    world.seed = SanitizeSeed(std::move(world.seed));
     world.lastPlayedUtc = CurrentUtcTimestamp();
     world.ticksPlayed = 0;
+    world.gameModeId = std::clamp(world.gameModeId, 0, 2);
+    world.difficulty = std::clamp(world.difficulty, 0, 3);
 
     worlds_.push_back(world);
     SaveWorldSnapshot(world.id, WorldSnapshot {});
@@ -212,21 +224,17 @@ bool WebStorage::LoadWorldManifest()
             continue;
         }
 
-        int id = 0;
-        int ticksPlayed = 0;
-        std::string name;
-        std::string lastPlayedUtc;
-        if (!SplitWorldLine(line, id, name, lastPlayedUtc, ticksPlayed)) {
+        WorldRecord world;
+        if (!SplitWorldLine(line, world)) {
             continue;
         }
 
-        WorldRecord world;
-        world.id = id;
-        world.name = SanitizeName(name);
-        world.lastPlayedUtc = lastPlayedUtc;
-        world.ticksPlayed = ticksPlayed;
+        world.name = SanitizeName(world.name);
+        world.seed = SanitizeSeed(world.seed);
+        world.gameModeId = std::clamp(world.gameModeId, 0, 2);
+        world.difficulty = std::clamp(world.difficulty, 0, 3);
         worlds_.push_back(world);
-        nextWorldId_ = std::max(nextWorldId_, id + 1);
+        nextWorldId_ = std::max(nextWorldId_, world.id + 1);
     }
 
     return true;
@@ -277,7 +285,12 @@ bool WebStorage::SaveWorldManifest() const
         output << world.id << '|'
                << SanitizeName(world.name) << '|'
                << world.lastPlayedUtc << '|'
-               << world.ticksPlayed << '\n';
+               << world.ticksPlayed << '|'
+               << std::clamp(world.gameModeId, 0, 2) << '|'
+               << std::clamp(world.difficulty, 0, 3) << '|'
+               << (world.generateStructures ? 1 : 0) << '|'
+               << (world.bonusChest ? 1 : 0) << '|'
+               << SanitizeSeed(world.seed) << '\n';
     }
 
     return true;
@@ -335,6 +348,24 @@ std::string WebStorage::SanitizeName(std::string name)
     }
 
     return name;
+}
+
+std::string WebStorage::SanitizeSeed(std::string seed)
+{
+    for (char& character : seed) {
+        if (character == '|' || character == '\n' || character == '\r' ||
+            std::iscntrl(static_cast<unsigned char>(character)) != 0) {
+            character = ' ';
+        }
+    }
+
+    seed = Trim(seed);
+    if (seed.size() > 64) {
+        seed.resize(64);
+        seed = Trim(seed);
+    }
+
+    return seed;
 }
 
 std::string WebStorage::CurrentUtcTimestamp()

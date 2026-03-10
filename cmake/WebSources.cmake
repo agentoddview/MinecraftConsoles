@@ -1,4 +1,5 @@
 set(MINECRAFT_WEB_SOURCES
+  "LegacyContent.cpp"
   "main.cpp"
   "WebApp.cpp"
   "WebInput.cpp"

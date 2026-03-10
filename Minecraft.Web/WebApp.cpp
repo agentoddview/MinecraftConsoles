@@ -63,6 +63,50 @@ const web::WorldRecord* FindWorld(const std::vector<web::WorldRecord>& worlds, i
     return nullptr;
 }
 
+const char* DifficultyKey(int difficulty)
+{
+    switch (std::clamp(difficulty, 0, 3)) {
+    case 0:
+        return "IDS_DIFFICULTY_TITLE_PEACEFUL";
+    case 1:
+        return "IDS_DIFFICULTY_TITLE_EASY";
+    case 2:
+        return "IDS_DIFFICULTY_TITLE_NORMAL";
+    case 3:
+        return "IDS_DIFFICULTY_TITLE_HARD";
+    default:
+        return "IDS_DIFFICULTY_TITLE_NORMAL";
+    }
+}
+
+const char* GameModeKey(int gameModeId)
+{
+    switch (std::clamp(gameModeId, 0, 2)) {
+    case 0:
+        return "IDS_GAMEMODE_SURVIVAL";
+    case 1:
+        return "IDS_GAMEMODE_CREATIVE";
+    case 2:
+        return "IDS_GAMEMODE_ADVENTURE";
+    default:
+        return "IDS_GAMEMODE_SURVIVAL";
+    }
+}
+
+const char* GameModeFallback(int gameModeId)
+{
+    switch (std::clamp(gameModeId, 0, 2)) {
+    case 0:
+        return "Survival";
+    case 1:
+        return "Creative";
+    case 2:
+        return "Adventure";
+    default:
+        return "Survival";
+    }
+}
+
 } // namespace
 
 namespace web {
@@ -77,23 +121,28 @@ WebApp::WebApp(BrowserPlatform& platform, WebStorage& storage, WebInput& input, 
 
 bool WebApp::Initialize()
 {
-    if (!renderer_.Initialize()) {
-        status_ = renderer_.LastError();
-        platform_.SetStatus(status_);
-        PublishUiState();
-        return false;
+    legacyContent_.Load("/legacy-media/en-EN.lang", "/legacy-media/splashes.txt");
+    mainMenuSplash_ = legacyContent_.PickMainMenuSplash();
+    if (mainMenuSplash_.empty()) {
+        mainMenuSplash_ = "Reticulating splines!";
     }
 
-    if (!input_.Initialize()) {
-        status_ = "Failed to bind browser keyboard and mouse callbacks.";
-        platform_.SetStatus(status_);
-        PublishUiState();
-        return false;
-    }
+    rendererReady_ = renderer_.Initialize();
+    inputReady_ = input_.Initialize();
 
     initialized_ = true;
     mode_ = Mode::Boot;
-    status_ = "Mounting browser storage...";
+    status_ = "Mounting browser storage for the legacy menu flow...";
+    if (!legacyContent_.IsLoaded()) {
+        status_ += " Using fallback menu labels.";
+    }
+    if (!rendererReady_) {
+        status_ += " WebGL panorama unavailable.";
+    }
+    if (!inputReady_) {
+        status_ += " Keyboard and mouse hotkeys unavailable.";
+    }
+
     lastFrameMs_ = platform_.NowMs();
     lastUiPublishMs_ = 0.0;
     lastPersistMs_ = lastFrameMs_;
@@ -108,10 +157,15 @@ void WebApp::OnStorageReady(bool success)
     storageReady_ = success;
     storage_.Load();
 
-    if (storageReady_) {
-        status_ = "Browser storage ready. Single-player web sandbox loaded.";
-    } else {
-        status_ = "Persistent storage could not be mounted. This session will be ephemeral.";
+    status_ = storageReady_
+        ? "Legacy main menu ready. Browser saves mounted."
+        : "Legacy main menu ready. Browser saves are ephemeral in this session.";
+
+    if (!rendererReady_) {
+        status_ += " WebGL panorama unavailable.";
+    }
+    if (!legacyContent_.IsLoaded()) {
+        status_ += " Using fallback legacy labels.";
     }
 
     mode_ = Mode::Title;
@@ -139,21 +193,23 @@ void WebApp::Tick()
         UpdateSimulation(deltaSeconds);
     }
 
-    renderer_.Resize(storage_.Options().renderScale);
+    if (rendererReady_) {
+        renderer_.Resize(storage_.Options().renderScale);
 
-    RenderState renderState;
-    renderState.timeSeconds = worldTimeSeconds_;
-    renderState.playerX = player_.playerX;
-    renderState.playerY = player_.playerY;
-    renderState.playerZ = player_.playerZ;
-    renderState.yawRadians = static_cast<float>(player_.yaw);
-    renderState.pitchRadians = static_cast<float>(player_.pitch);
-    renderState.dimStrength = (mode_ == Mode::Paused || mode_ == Mode::Settings ||
-                               mode_ == Mode::Inventory || mode_ == Mode::Chat)
-        ? 0.48f
-        : 0.0f;
+        RenderState renderState;
+        renderState.timeSeconds = worldTimeSeconds_;
+        renderState.playerX = player_.playerX;
+        renderState.playerY = player_.playerY;
+        renderState.playerZ = player_.playerZ;
+        renderState.yawRadians = static_cast<float>(player_.yaw);
+        renderState.pitchRadians = static_cast<float>(player_.pitch);
+        renderState.dimStrength = (mode_ == Mode::Paused || mode_ == Mode::Settings ||
+                                   mode_ == Mode::Inventory || mode_ == Mode::Chat)
+            ? 0.48f
+            : 0.0f;
+        renderer_.Render(renderState);
+    }
 
-    renderer_.Render(renderState);
     platform_.Tick(deltaSeconds);
 
     if (currentWorldId_ >= 0 && (nowMs - lastPersistMs_) > 2000.0) {
@@ -177,8 +233,18 @@ void WebApp::ShowWorldSelection()
         return;
     }
 
-    status_ = "Select a world or create a new one.";
+    status_ = GetLegacyString("IDS_LOAD_SAVED_WORLD", "Load Saved World");
     SetMode(Mode::Worlds, false);
+}
+
+void WebApp::ShowCreateWorldMenu()
+{
+    if (mode_ == Mode::Boot) {
+        return;
+    }
+
+    status_ = GetLegacyString("IDS_CREATE_NEW_WORLD", "Create New World");
+    SetMode(Mode::CreateWorld, false);
 }
 
 void WebApp::ReturnToTitle()
@@ -190,18 +256,32 @@ void WebApp::ReturnToTitle()
     currentWorldId_ = -1;
     currentWorldName_.clear();
     player_ = WorldSnapshot {};
-    status_ = "Returned to the title screen.";
+    status_ = "Legacy main menu ready.";
     SetMode(Mode::Title, false);
 }
 
-void WebApp::StartNewWorld(std::string_view name)
+void WebApp::StartNewWorld(
+    std::string_view name,
+    std::string_view seed,
+    int gameModeId,
+    int difficulty,
+    bool generateStructures,
+    bool bonusChest)
 {
-    const WorldRecord world = storage_.CreateWorld(std::string(name));
-    currentWorldId_ = world.id;
-    currentWorldName_ = world.name;
+    WorldRecord world;
+    world.name = std::string(name);
+    world.seed = std::string(seed);
+    world.gameModeId = std::clamp(gameModeId, 0, 2);
+    world.difficulty = std::clamp(difficulty, 0, 3);
+    world.generateStructures = generateStructures;
+    world.bonusChest = bonusChest;
+
+    const WorldRecord createdWorld = storage_.CreateWorld(std::move(world));
+    currentWorldId_ = createdWorld.id;
+    currentWorldName_ = createdWorld.name;
     player_ = WorldSnapshot {};
     worldTimeSeconds_ = 0.0;
-    status_ = "Created world \"" + world.name + "\".";
+    status_ = "Created world \"" + createdWorld.name + "\".";
     SaveCurrentWorld(true);
     SetMode(Mode::InGame, true);
 }
@@ -229,7 +309,7 @@ void WebApp::OpenWorldById(int worldId)
 void WebApp::DeleteWorldById(int worldId)
 {
     if (storage_.DeleteWorld(worldId)) {
-        status_ = "Deleted world #" + std::to_string(worldId) + ".";
+        status_ = "Deleted world #" + std::to_string(worldId) + '.';
         PublishUiState();
     }
 }
@@ -240,7 +320,7 @@ void WebApp::PauseGame()
         return;
     }
 
-    status_ = "Game paused.";
+    status_ = GetLegacyString("IDS_PAUSE_GAME", "Pause Menu");
     SetMode(Mode::Paused, false);
 }
 
@@ -260,11 +340,19 @@ void WebApp::OpenSettings()
         return;
     }
 
-    modalReturnMode_ = (mode_ == Mode::Paused || mode_ == Mode::Inventory || mode_ == Mode::Chat)
-        ? Mode::Paused
-        : (mode_ == Mode::InGame ? Mode::InGame : Mode::Title);
+    if (mode_ == Mode::Paused || mode_ == Mode::Inventory || mode_ == Mode::Chat) {
+        modalReturnMode_ = Mode::Paused;
+    } else if (mode_ == Mode::InGame) {
+        modalReturnMode_ = Mode::InGame;
+    } else if (mode_ == Mode::CreateWorld) {
+        modalReturnMode_ = Mode::CreateWorld;
+    } else if (mode_ == Mode::Worlds) {
+        modalReturnMode_ = Mode::Worlds;
+    } else {
+        modalReturnMode_ = Mode::Title;
+    }
 
-    status_ = "Adjust browser-side settings for this prototype.";
+    status_ = GetLegacyString("IDS_HELP_AND_OPTIONS", "Help & Options");
     SetMode(Mode::Settings, false);
 }
 
@@ -277,6 +365,9 @@ void WebApp::CloseOverlay()
     case Mode::Inventory:
     case Mode::Chat:
         ResumeGame();
+        break;
+    case Mode::CreateWorld:
+        ShowWorldSelection();
         break;
     case Mode::Worlds:
         ReturnToTitle();
@@ -301,7 +392,7 @@ void WebApp::ToggleInventory()
         return;
     }
 
-    status_ = "Inventory opened.";
+    status_ = GetLegacyString("IDS_INVENTORY", "Inventory");
     SetMode(Mode::Inventory, false);
 }
 
@@ -320,7 +411,7 @@ void WebApp::ToggleChat()
         return;
     }
 
-    status_ = "Chat opened.";
+    status_ = "Chat is UI-only in this browser milestone.";
     SetMode(Mode::Chat, false);
 }
 
@@ -356,7 +447,7 @@ void WebApp::UpdateSettingInt(std::string_view key, int value)
         platform_.FlushPersistentStorage();
     }
 
-    status_ = "Updated prototype settings.";
+    status_ = GetLegacyString("IDS_SETTINGS", "Settings");
     PublishUiState();
 }
 
@@ -398,6 +489,8 @@ void WebApp::UpdateHotkeys()
             SetMode(modalReturnMode_, modalReturnMode_ == Mode::InGame);
         } else if (mode_ == Mode::Inventory || mode_ == Mode::Chat) {
             SetMode(Mode::Paused, false);
+        } else if (mode_ == Mode::CreateWorld) {
+            ShowWorldSelection();
         } else if (mode_ == Mode::Worlds) {
             ReturnToTitle();
         }
@@ -494,6 +587,7 @@ void WebApp::PublishUiState()
     json << "\"mode\":\"" << ModeName(mode_) << "\",";
     json << "\"status\":\"" << JsonEscape(status_) << "\",";
     json << "\"storageReady\":" << storageReady_ << ',';
+    json << "\"rendererReady\":" << rendererReady_ << ',';
     json << "\"currentWorldId\":" << currentWorldId_ << ',';
     json << "\"currentWorldName\":\"" << JsonEscape(currentWorldName_) << "\",";
     json << "\"pointerLocked\":" << platform_.IsPointerLocked() << ',';
@@ -512,6 +606,45 @@ void WebApp::PublishUiState()
     json << "\"pitch\":" << std::fixed << std::setprecision(2) << player_.pitch << ',';
     json << "\"ticksPlayed\":" << player_.ticksPlayed;
     json << "},";
+    json << "\"legacy\":{";
+    json << "\"loaded\":" << legacyContent_.IsLoaded() << ',';
+    json << "\"title\":\"" << JsonEscape("Minecraft") << "\",";
+    json << "\"edition\":\"" << JsonEscape("Legacy Console Edition") << "\",";
+    json << "\"tagline\":\"" << JsonEscape("Browser port milestone sourced from the legacy clone repo") << "\",";
+    json << "\"splash\":\"" << JsonEscape(mainMenuSplash_) << "\",";
+    json << "\"playGame\":\"" << JsonEscape(GetLegacyString("IDS_PLAY_GAME", "Play Game")) << "\",";
+    json << "\"leaderboards\":\"" << JsonEscape(GetLegacyString("IDS_LEADERBOARDS", "Leaderboards")) << "\",";
+    json << "\"achievements\":\"" << JsonEscape(GetLegacyString("IDS_ACHIEVEMENTS", "Achievements")) << "\",";
+    json << "\"helpAndOptions\":\"" << JsonEscape(GetLegacyString("IDS_HELP_AND_OPTIONS", "Help & Options")) << "\",";
+    json << "\"downloadableContent\":\"" << JsonEscape(GetLegacyString("IDS_DOWNLOADABLECONTENT", "Downloadable Content")) << "\",";
+    json << "\"exitGame\":\"" << JsonEscape(GetLegacyString("IDS_EXIT_GAME", "Exit Game")) << "\",";
+    json << "\"loadSavedWorld\":\"" << JsonEscape(GetLegacyString("IDS_LOAD_SAVED_WORLD", "Load Saved World")) << "\",";
+    json << "\"createNewWorld\":\"" << JsonEscape(GetLegacyString("IDS_CREATE_NEW_WORLD", "Create New World")) << "\",";
+    json << "\"worldName\":\"" << JsonEscape(GetLegacyString("IDS_WORLD_NAME", "World Name")) << "\",";
+    json << "\"defaultWorldName\":\"" << JsonEscape(GetLegacyString("IDS_DEFAULT_WORLD_NAME", "New World")) << "\",";
+    json << "\"worldSeed\":\"" << JsonEscape(GetLegacyString("IDS_CREATE_NEW_WORLD_SEED", "Seed")) << "\",";
+    json << "\"randomSeed\":\"" << JsonEscape(GetLegacyString("IDS_CREATE_NEW_WORLD_RANDOM_SEED", "Leave blank for a random seed")) << "\",";
+    json << "\"moreOptions\":\"" << JsonEscape(GetLegacyString("IDS_MORE_OPTIONS", "More Options")) << "\",";
+    json << "\"onlineGame\":\"" << JsonEscape(GetLegacyString("IDS_ONLINE_GAME", "Online Game")) << "\",";
+    json << "\"generateStructures\":\"" << JsonEscape(GetLegacyString("IDS_GENERATE_STRUCTURES", "Generate Structures")) << "\",";
+    json << "\"bonusChest\":\"" << JsonEscape(GetLegacyString("IDS_BONUS_CHEST", "Bonus Chest")) << "\",";
+    json << "\"difficulty\":\"" << JsonEscape(GetLegacyString("IDS_SLIDER_DIFFICULTY", "Difficulty")) << "\",";
+    json << "\"difficultyPeaceful\":\"" << JsonEscape(GetDifficultyLabel(0)) << "\",";
+    json << "\"difficultyEasy\":\"" << JsonEscape(GetDifficultyLabel(1)) << "\",";
+    json << "\"difficultyNormal\":\"" << JsonEscape(GetDifficultyLabel(2)) << "\",";
+    json << "\"difficultyHard\":\"" << JsonEscape(GetDifficultyLabel(3)) << "\",";
+    json << "\"gameModeSurvival\":\"" << JsonEscape(GetGameModeLabel(0)) << "\",";
+    json << "\"gameModeCreative\":\"" << JsonEscape(GetGameModeLabel(1)) << "\",";
+    json << "\"gameModeAdventure\":\"" << JsonEscape(GetGameModeLabel(2)) << "\",";
+    json << "\"createdInSurvival\":\"" << JsonEscape(GetLegacyString("IDS_CREATED_IN_SURVIVAL", "Created in Survival")) << "\",";
+    json << "\"createdInCreative\":\"" << JsonEscape(GetLegacyString("IDS_CREATED_IN_CREATIVE", "Created in Creative")) << "\",";
+    json << "\"resumeGame\":\"" << JsonEscape(GetLegacyString("IDS_RESUME_GAME", "Resume Game")) << "\",";
+    json << "\"load\":\"" << JsonEscape(GetLegacyString("IDS_LOAD", "Load")) << "\",";
+    json << "\"settings\":\"" << JsonEscape(GetLegacyString("IDS_SETTINGS", "Settings")) << "\",";
+    json << "\"inventory\":\"" << JsonEscape(GetLegacyString("IDS_INVENTORY", "Inventory")) << "\",";
+    json << "\"chat\":\"" << JsonEscape("Chat") << "\",";
+    json << "\"notSupported\":\"" << JsonEscape("This legacy menu item is not wired into the browser milestone yet.") << "\"";
+    json << "},";
     json << "\"worlds\":[";
 
     for (std::size_t index = 0; index < storage_.Worlds().size(); ++index) {
@@ -524,7 +657,15 @@ void WebApp::PublishUiState()
         json << "\"id\":" << world.id << ',';
         json << "\"name\":\"" << JsonEscape(world.name) << "\",";
         json << "\"lastPlayedUtc\":\"" << JsonEscape(world.lastPlayedUtc) << "\",";
-        json << "\"ticksPlayed\":" << world.ticksPlayed;
+        json << "\"ticksPlayed\":" << world.ticksPlayed << ',';
+        json << "\"gameModeId\":" << std::clamp(world.gameModeId, 0, 2) << ',';
+        json << "\"gameModeLabel\":\"" << JsonEscape(GetGameModeLabel(world.gameModeId)) << "\",";
+        json << "\"createdModeLabel\":\"" << JsonEscape(GetCreatedModeLabel(world)) << "\",";
+        json << "\"difficulty\":" << std::clamp(world.difficulty, 0, 3) << ',';
+        json << "\"difficultyLabel\":\"" << JsonEscape(GetDifficultyLabel(world.difficulty)) << "\",";
+        json << "\"generateStructures\":" << world.generateStructures << ',';
+        json << "\"bonusChest\":" << world.bonusChest << ',';
+        json << "\"seed\":\"" << JsonEscape(world.seed) << "\"";
         json << '}';
     }
 
@@ -536,6 +677,41 @@ void WebApp::PublishUiState()
     platform_.PublishUiState(json.str());
 }
 
+std::string WebApp::GetLegacyString(std::string_view key, std::string_view fallback) const
+{
+    return legacyContent_.GetString(key, fallback);
+}
+
+std::string WebApp::GetDifficultyLabel(int difficulty) const
+{
+    switch (std::clamp(difficulty, 0, 3)) {
+    case 0:
+        return GetLegacyString(DifficultyKey(0), "Peaceful");
+    case 1:
+        return GetLegacyString(DifficultyKey(1), "Easy");
+    case 2:
+        return GetLegacyString(DifficultyKey(2), "Normal");
+    case 3:
+        return GetLegacyString(DifficultyKey(3), "Hard");
+    default:
+        return GetLegacyString(DifficultyKey(2), "Normal");
+    }
+}
+
+std::string WebApp::GetGameModeLabel(int gameModeId) const
+{
+    return GetLegacyString(GameModeKey(gameModeId), GameModeFallback(gameModeId));
+}
+
+std::string WebApp::GetCreatedModeLabel(const WorldRecord& world) const
+{
+    if (std::clamp(world.gameModeId, 0, 2) == 1) {
+        return GetLegacyString("IDS_CREATED_IN_CREATIVE", "Created in Creative");
+    }
+
+    return GetLegacyString("IDS_CREATED_IN_SURVIVAL", "Created in Survival");
+}
+
 const char* WebApp::ModeName(Mode mode)
 {
     switch (mode) {
@@ -545,6 +721,8 @@ const char* WebApp::ModeName(Mode mode)
         return "title";
     case Mode::Worlds:
         return "worlds";
+    case Mode::CreateWorld:
+        return "create_world";
     case Mode::InGame:
         return "in_game";
     case Mode::Paused:

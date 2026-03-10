@@ -16,6 +16,11 @@ struct WorldRecord {
     std::string name;
     std::string lastPlayedUtc;
     int ticksPlayed = 0;
+    int gameModeId = 0;
+    int difficulty = 2;
+    bool generateStructures = true;
+    bool bonusChest = false;
+    std::string seed;
 };
 
 struct WorldSnapshot {
@@ -40,7 +45,7 @@ public:
     const WebOptions& Options() const;
     WebOptions& MutableOptions();
 
-    WorldRecord CreateWorld(std::string name);
+    WorldRecord CreateWorld(WorldRecord world);
     bool DeleteWorld(int worldId);
     void TouchWorld(int worldId, int ticksPlayed);
 
@@ -58,6 +63,7 @@ private:
     std::string WorldStatePath(int worldId) const;
 
     static std::string SanitizeName(std::string name);
+    static std::string SanitizeSeed(std::string seed);
     static std::string CurrentUtcTimestamp();
 
     std::string savesRoot_;

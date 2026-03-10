@@ -40,6 +40,8 @@ if(MINECRAFT_IS_EMSCRIPTEN)
     "-sENVIRONMENT=web"
     "-sEXPORTED_RUNTIME_METHODS=['ccall','cwrap','FS']"
     "-lidbfs.js"
+    "SHELL:--preload-file ${CMAKE_CURRENT_SOURCE_DIR}/Minecraft.Client/Common/Media/en-EN.lang@/legacy-media/en-EN.lang"
+    "SHELL:--preload-file ${CMAKE_CURRENT_SOURCE_DIR}/Minecraft.Client/Common/Media/splashes.txt@/legacy-media/splashes.txt"
     "--shell-file" "${CMAKE_CURRENT_SOURCE_DIR}/Minecraft.Web/web_shell.html"
   )
   set_target_properties(MinecraftWeb PROPERTIES
