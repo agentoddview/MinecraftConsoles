@@ -1,15 +1,23 @@
 cmake_minimum_required(VERSION 3.24)
 
-if(EMSCRIPTEN)
-  project(MinecraftConsoles LANGUAGES C CXX)
-else()
-  project(MinecraftConsoles LANGUAGES C CXX RC ASM_MASM)
-endif()
+project(MinecraftConsoles LANGUAGES C CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-if(EMSCRIPTEN)
+set(MINECRAFT_IS_EMSCRIPTEN FALSE)
+if(CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
+  set(MINECRAFT_IS_EMSCRIPTEN TRUE)
+elseif(EMSCRIPTEN)
+  set(MINECRAFT_IS_EMSCRIPTEN TRUE)
+endif()
+
+if(NOT MINECRAFT_IS_EMSCRIPTEN AND WIN32)
+  enable_language(RC)
+  enable_language(ASM_MASM)
+endif()
+
+if(MINECRAFT_IS_EMSCRIPTEN)
   include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/WebSources.cmake")
 
   list(TRANSFORM MINECRAFT_WEB_SOURCES PREPEND "${CMAKE_CURRENT_SOURCE_DIR}/Minecraft.Web/")
